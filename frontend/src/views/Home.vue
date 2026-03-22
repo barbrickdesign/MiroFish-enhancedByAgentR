@@ -179,8 +179,10 @@
                   placeholder="// 用自然语言输入模拟或预测需求（例.武大若发布撤销肖某处分的公告，会引发什么舆情走向）"
                   rows="6"
                   :disabled="loading"
+                  @keydown.ctrl.enter.prevent="startSimulation"
+                  @keydown.meta.enter.prevent="startSimulation"
                 ></textarea>
-                <div class="model-badge">引擎: MiroFish-V1.0</div>
+                <div class="model-badge">引擎: MiroFish-V1.0 <span class="kbd-hint">Ctrl+Enter 启动</span></div>
               </div>
             </div>
 
@@ -814,6 +816,18 @@ const startSimulation = () => {
   font-family: var(--font-mono);
   font-size: 0.7rem;
   color: #AAA;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kbd-hint {
+  background: var(--gray-light);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 0.65rem;
+  color: var(--gray-text);
 }
 
 .start-engine-btn {

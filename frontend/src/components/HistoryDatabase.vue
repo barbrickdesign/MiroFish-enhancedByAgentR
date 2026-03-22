@@ -17,10 +17,31 @@
       <div class="section-line"></div>
     </div>
 
+    <!-- 搜索栏（只在有项目时显示） -->
+    <div v-if="projects.length > 0" class="search-bar-wrapper">
+      <div class="search-bar">
+        <svg class="search-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input
+          v-model="searchQuery"
+          class="search-input"
+          type="text"
+          placeholder="搜索推演记录..."
+          autocomplete="off"
+        />
+        <button v-if="searchQuery" class="search-clear-btn" @click="searchQuery = ''" title="清除搜索">×</button>
+      </div>
+      <span v-if="searchQuery" class="search-result-hint">
+        {{ filteredProjects.length }} / {{ projects.length }} 条记录
+      </span>
+    </div>
+
     <!-- 卡片容器（只在有项目时显示） -->
-    <div v-if="projects.length > 0" class="cards-container" :class="{ expanded: isExpanded }" :style="containerStyle">
+    <div v-if="filteredProjects.length > 0" class="cards-container" :class="{ expanded: isExpanded }" :style="containerStyle">
       <div 
-        v-for="(project, index) in projects" 
+        v-for="(project, index) in filteredProjects" 
         :key="project.simulation_id"
         class="project-card"
         :class="{ expanded: isExpanded, hovering: hoveringCard === index }"
@@ -105,6 +126,12 @@
       <span class="loading-text">加载中...</span>
     </div>
 
+    <!-- 搜索无结果提示 -->
+    <div v-if="!loading && projects.length > 0 && filteredProjects.length === 0" class="no-results-state">
+      <span class="no-results-icon">◇</span>
+      <span class="no-results-text">没有符合 "{{ searchQuery }}" 的推演记录</span>
+    </div>
+
     <!-- 历史回放详情弹窗 -->
     <Teleport to="body">
       <Transition name="modal">
@@ -128,6 +155,25 @@
               <div class="modal-section">
                 <div class="modal-label">模拟需求</div>
                 <div class="modal-requirement">{{ selectedProject.simulation_requirement || '无' }}</div>
+              </div>
+
+              <!-- 摘要统计 -->
+              <div class="modal-section" v-if="selectedSummary">
+                <div class="modal-label">运行统计</div>
+                <div class="modal-stats-row">
+                  <div class="modal-stat">
+                    <span class="modal-stat-value">{{ selectedSummary.completed_rounds }}<span class="modal-stat-denom">/{{ selectedSummary.total_rounds }}</span></span>
+                    <span class="modal-stat-label">轮次</span>
+                  </div>
+                  <div class="modal-stat">
+                    <span class="modal-stat-value">{{ selectedSummary.total_actions }}</span>
+                    <span class="modal-stat-label">总动作</span>
+                  </div>
+                  <div class="modal-stat">
+                    <span class="modal-stat-value">{{ selectedSummary.active_agents }}<span class="modal-stat-denom">/{{ selectedSummary.total_agents }}</span></span>
+                    <span class="modal-stat-label">活跃Agent</span>
+                  </div>
+                </div>
               </div>
 
               <!-- 文件列表 -->
@@ -193,7 +239,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, onActivated, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { getSimulationHistory } from '../api/simulation'
+import { getSimulationHistory, getSimulationSummary } from '../api/simulation'
 
 const router = useRouter()
 const route = useRoute()
@@ -205,10 +251,31 @@ const isExpanded = ref(false)
 const hoveringCard = ref(null)
 const historyContainer = ref(null)
 const selectedProject = ref(null)  // 当前选中的项目（用于弹窗）
+const selectedSummary = ref(null)   // 选中项目的摘要统计
+const searchQuery = ref('')         // 搜索过滤词（实时绑定）
+const debouncedQuery = ref('')      // 防抖后的搜索词（用于实际过滤）
 let observer = null
 let isAnimating = false  // 动画锁，防止闪烁
 let expandDebounceTimer = null  // 防抖定时器
 let pendingState = null  // 记录待执行的目标状态
+let searchDebounceTimer = null  // 搜索防抖定时器
+
+// 搜索防抖：监听搜索词变化，延迟150ms后更新实际过滤词
+watch(searchQuery, (val) => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = setTimeout(() => { debouncedQuery.value = val }, 150)
+})
+
+// 过滤后的项目列表
+const filteredProjects = computed(() => {
+  const q = debouncedQuery.value.trim().toLowerCase()
+  if (!q) return projects.value
+  return projects.value.filter(p => {
+    const req = (p.simulation_requirement || '').toLowerCase()
+    const id = (p.simulation_id || '').toLowerCase()
+    return req.includes(q) || id.includes(q)
+  })
+})
 
 // 卡片布局配置 - 调整为更宽的比例
 const CARDS_PER_ROW = 4
@@ -224,7 +291,7 @@ const containerStyle = computed(() => {
   }
   
   // 展开态：根据卡片数量动态计算高度
-  const total = projects.value.length
+  const total = filteredProjects.value.length
   if (total === 0) {
     return { minHeight: '280px' }
   }
@@ -238,7 +305,7 @@ const containerStyle = computed(() => {
 
 // 获取卡片样式
 const getCardStyle = (index) => {
-  const total = projects.value.length
+  const total = filteredProjects.value.length
   
   if (isExpanded.value) {
     // 展开态：网格布局
@@ -392,13 +459,24 @@ const truncateFilename = (filename, maxLength) => {
 }
 
 // 打开项目详情弹窗
-const navigateToProject = (simulation) => {
+const navigateToProject = async (simulation) => {
   selectedProject.value = simulation
+  selectedSummary.value = null
+  // Fetch summary stats in the background
+  try {
+    const res = await getSimulationSummary(simulation.simulation_id)
+    if (res.success) {
+      selectedSummary.value = res.data
+    }
+  } catch {
+    // summary is optional, silently ignore errors
+  }
 }
 
 // 关闭弹窗
 const closeModal = () => {
   selectedProject.value = null
+  selectedSummary.value = null
 }
 
 // 导航到图谱构建页面（Project）
@@ -1336,5 +1414,132 @@ onUnmounted(() => {
   letter-spacing: 0.3px;
   text-align: center;
   line-height: 1.5;
+}
+
+/* 搜索栏样式 */
+.search-bar-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.search-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  padding: 7px 12px;
+  width: 320px;
+  transition: border-color 0.2s;
+}
+
+.search-bar:focus-within {
+  border-color: #9CA3AF;
+}
+
+.search-icon {
+  color: #9CA3AF;
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  color: #111827;
+  background: transparent;
+}
+
+.search-input::placeholder {
+  color: #9CA3AF;
+}
+
+.search-clear-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #9CA3AF;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0 2px;
+  transition: color 0.15s;
+}
+
+.search-clear-btn:hover {
+  color: #374151;
+}
+
+.search-result-hint {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: #9CA3AF;
+  white-space: nowrap;
+}
+
+/* 搜索无结果 */
+.no-results-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 20px;
+  color: #9CA3AF;
+}
+
+.no-results-icon {
+  font-size: 2rem;
+  opacity: 0.4;
+}
+
+.no-results-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+}
+
+/* 模态框统计行 */
+.modal-stats-row {
+  display: flex;
+  gap: 12px;
+}
+
+.modal-stat {
+  flex: 1;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  padding: 10px 8px;
+  text-align: center;
+}
+
+.modal-stat-value {
+  display: block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.modal-stat-denom {
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: #6B7280;
+}
+
+.modal-stat-label {
+  display: block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: #9CA3AF;
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 </style>

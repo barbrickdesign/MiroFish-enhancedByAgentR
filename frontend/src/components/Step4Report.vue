@@ -442,9 +442,10 @@ const copySuccess = ref(false)
 const handleDownload = async () => {
   if (!props.reportId || isDownloading.value) return
   isDownloading.value = true
+  const MAX_FILENAME_LENGTH = 60
   try {
     const title = reportOutline.value?.title || props.reportId
-    const safeName = title.replace(/[/\\?%*:|"<>]/g, '-').slice(0, 60)
+    const safeName = title.replace(/[/\\?%*:|"<>]/g, '-').slice(0, MAX_FILENAME_LENGTH)
     await downloadReport(props.reportId, `${safeName}.md`)
   } catch (err) {
     console.error('Failed to download report:', err)
@@ -2431,6 +2432,7 @@ watch(() => props.reportId, (newId) => {
   align-items: center;
   gap: 12px;
   margin-bottom: 24px;
+  flex-wrap: wrap;
 }
 
 .report-tag {
@@ -5215,13 +5217,6 @@ watch(() => props.reportId, (newId) => {
 .log-msg.success { color: #66BB6A; }
 
 /* Report header actions (download / copy buttons) */
-.report-meta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
 .report-actions {
   display: flex;
   align-items: center;
