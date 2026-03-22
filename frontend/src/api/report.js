@@ -49,3 +49,22 @@ export const getReport = (reportId) => {
 export const chatWithReport = (data) => {
   return requestWithRetry(() => service.post('/api/report/chat', data), 3, 1000)
 }
+
+/**
+ * 下载报告（Markdown格式）
+ * @param {string} reportId
+ * @param {string} filename - 保存的文件名（可选）
+ */
+export const downloadReport = async (reportId, filename) => {
+  const response = await service.get(`/api/report/${reportId}/download`, {
+    responseType: 'blob'
+  })
+  const url = URL.createObjectURL(new Blob([response.data], { type: 'text/markdown' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename || `${reportId}.md`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}

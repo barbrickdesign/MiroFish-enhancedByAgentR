@@ -185,3 +185,11 @@ export const getSimulationHistory = (limit = 20) => {
   return service.get('/api/simulation/history', { params: { limit } })
 }
 
+/**
+ * 获取模拟综合摘要（状态、动作数、Agent 数、报告状态等）
+ * @param {string} simulationId
+ */
+export const getSimulationSummary = (simulationId) => {
+  return service.get(`/api/simulation/${simulationId}/summary`)
+}
+

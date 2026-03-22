@@ -179,6 +179,8 @@
                   placeholder="// Enter simulation or prediction requirements in natural language (e.g. If Wuhan University announces the revocation of a disciplinary decision, what public opinion trends would emerge?)"
                   rows="6"
                   :disabled="loading"
+                  @keydown.ctrl.enter.prevent="startSimulation"
+                  @keydown.meta.enter.prevent="startSimulation"
                 ></textarea>
                 <div class="model-badge">Engine: MiroFish-V1.0</div>
               </div>
@@ -814,6 +816,18 @@ const startSimulation = () => {
   font-family: var(--font-mono);
   font-size: 0.7rem;
   color: #AAA;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kbd-hint {
+  background: var(--gray-light);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 0.65rem;
+  color: var(--gray-text);
 }
 
 .start-engine-btn {

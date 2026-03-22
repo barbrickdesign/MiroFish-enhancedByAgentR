@@ -1977,6 +1977,104 @@ def get_agent_stats(simulation_id: str):
         }), 500
 
 
+@simulation_bp.route('/<simulation_id>/summary', methods=['GET'])
+def get_simulation_summary(simulation_id: str):
+    """
+    获取模拟的综合摘要信息
+
+    聚合模拟基础信息、运行状态与 Agent 统计，提供单一入口的简洁快照。
+
+    返回：
+        {
+            "success": true,
+            "data": {
+                "simulation_id": "sim_xxxx",
+                "status": "completed",
+                "total_rounds": 144,
+                "completed_rounds": 144,
+                "progress_percent": 100.0,
+                "total_actions": 8420,
+                "twitter_actions": 4100,
+                "reddit_actions": 4320,
+                "active_agents": 82,
+                "total_agents": 100,
+                "has_report": true,
+                "report_id": "report_xxxx",
+                "created_at": "2025-12-01T10:00:00",
+                "completed_at": "2025-12-01T12:30:00"
+            }
+        }
+    """
+    try:
+        manager = SimulationManager()
+        state = manager.get_simulation(simulation_id)
+
+        if not state:
+            return jsonify({
+                "success": False,
+                "error": f"模拟不存在: {simulation_id}"
+            }), 404
+
+        run_state = SimulationRunner.get_run_state(simulation_id)
+        agent_stats = SimulationRunner.get_agent_stats(simulation_id)
+
+        total_actions = 0
+        twitter_actions = 0
+        reddit_actions = 0
+        active_agents = 0
+
+        if run_state:
+            twitter_actions = getattr(run_state, 'twitter_actions_count', 0)
+            reddit_actions = getattr(run_state, 'reddit_actions_count', 0)
+            _raw_total = getattr(run_state, 'total_actions_count', None)
+            total_actions = _raw_total if _raw_total is not None else (twitter_actions + reddit_actions)
+            current_round = getattr(run_state, 'current_round', 0)
+            total_rounds = getattr(run_state, 'total_rounds', 0)
+            progress_percent = round(current_round / total_rounds * 100, 1) if total_rounds else 0
+        else:
+            current_round = 0
+            total_rounds = 0
+            progress_percent = 0
+
+        if agent_stats:
+            active_agents = sum(1 for a in agent_stats if a.get('total_actions', 0) > 0)
+
+        # Check whether a report exists for this simulation
+        from ..services.report_agent import ReportManager, ReportStatus
+        existing_report = ReportManager.get_report_by_simulation(simulation_id)
+        has_report = existing_report is not None and existing_report.status == ReportStatus.COMPLETED
+        report_id = existing_report.report_id if has_report else None
+
+        summary = {
+            "simulation_id": simulation_id,
+            "status": state.status.value if hasattr(state.status, 'value') else str(state.status),
+            "total_rounds": total_rounds,
+            "completed_rounds": current_round,
+            "progress_percent": progress_percent,
+            "total_actions": total_actions,
+            "twitter_actions": twitter_actions,
+            "reddit_actions": reddit_actions,
+            "active_agents": active_agents,
+            "total_agents": len(agent_stats) if agent_stats else 0,
+            "has_report": has_report,
+            "report_id": report_id,
+            "created_at": state.created_at.isoformat() if hasattr(state, 'created_at') and state.created_at else None,
+        }
+
+        return jsonify({
+            "success": True,
+            "data": summary
+        })
+
+    except Exception as e:
+        logger.error(f"获取模拟摘要失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
 # ============== 数据库查询接口 ==============
 
 @simulation_bp.route('/<simulation_id>/posts', methods=['GET'])
