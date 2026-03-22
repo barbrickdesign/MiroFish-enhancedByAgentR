@@ -10,6 +10,29 @@
             <div class="report-meta">
               <span class="report-tag">Prediction Report</span>
               <span class="report-id">ID: {{ reportId || 'REF-2024-X92' }}</span>
+              <div class="report-actions" v-if="isComplete">
+                <button class="action-icon-btn" @click="handleDownload" :disabled="isDownloading" :title="isDownloading ? 'Downloading...' : 'Download report as Markdown'">
+                  <svg v-if="!isDownloading" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                  <svg v-else class="spin-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+                  </svg>
+                  <span>{{ isDownloading ? 'Downloading...' : 'Download' }}</span>
+                </button>
+                <button class="action-icon-btn" @click="handleCopy" :title="copySuccess ? 'Copied!' : 'Copy all content to clipboard'">
+                  <svg v-if="!copySuccess" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                  <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                  <span>{{ copySuccess ? 'Copied!' : 'Copy' }}</span>
+                </button>
+              </div>
             </div>
             <h1 class="main-title">{{ reportOutline.title }}</h1>
             <p class="sub-title">{{ reportOutline.summary }}</p>
@@ -392,7 +415,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick, h, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { getAgentLog, getConsoleLog } from '../api/report'
+import { getAgentLog, getConsoleLog, downloadReport } from '../api/report'
 
 const router = useRouter()
 
@@ -408,6 +431,49 @@ const emit = defineEmits(['add-log', 'update-status'])
 const goToInteraction = () => {
   if (props.reportId) {
     router.push({ name: 'Interaction', params: { reportId: props.reportId } })
+  }
+}
+
+// Download & copy state
+const isDownloading = ref(false)
+const copySuccess = ref(false)
+
+// Download report as Markdown
+const handleDownload = async () => {
+  if (!props.reportId || isDownloading.value) return
+  isDownloading.value = true
+  try {
+    const title = reportOutline.value?.title || props.reportId
+    const safeName = title.replace(/[/\\?%*:|"<>]/g, '-').slice(0, 60)
+    await downloadReport(props.reportId, `${safeName}.md`)
+  } catch (err) {
+    console.error('Failed to download report:', err)
+  } finally {
+    isDownloading.value = false
+  }
+}
+
+// Copy all section content to clipboard
+const handleCopy = async () => {
+  if (copySuccess.value) return
+  const sections = reportOutline.value?.sections || []
+  const lines = []
+  if (reportOutline.value?.title) lines.push(`# ${reportOutline.value.title}`)
+  if (reportOutline.value?.summary) lines.push(`\n${reportOutline.value.summary}\n`)
+  sections.forEach((section, idx) => {
+    const content = generatedSections.value[idx + 1]
+    if (content) {
+      lines.push(`\n## ${section.title}\n`)
+      lines.push(content)
+    }
+  })
+  const text = lines.join('\n')
+  try {
+    await navigator.clipboard.writeText(text)
+    copySuccess.value = true
+    setTimeout(() => { copySuccess.value = false }, 2000)
+  } catch (err) {
+    console.error('Failed to copy:', err)
   }
 }
 
@@ -5147,4 +5213,56 @@ watch(() => props.reportId, (newId) => {
 .log-msg.error { color: #EF5350; }
 .log-msg.warning { color: #FFA726; }
 .log-msg.success { color: #66BB6A; }
+
+/* Report header actions (download / copy buttons) */
+.report-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.report-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.action-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500;
+  color: #374151;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.action-icon-btn:hover:not(:disabled) {
+  background: #F3F4F6;
+  border-color: #9CA3AF;
+  color: #111827;
+}
+
+.action-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin-icon {
+  animation: spin 0.8s linear infinite;
+}
 </style>

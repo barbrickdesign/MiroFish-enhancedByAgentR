@@ -3,7 +3,12 @@ MiroFish Backend - Flask应用工厂
 """
 
 import os
+import time
 import warnings
+
+# Record startup time for uptime reporting
+_start_time = time.time()
+VERSION = "0.1.0"
 
 # 抑制 multiprocessing resource_tracker 的警告（来自第三方库如 transformers）
 # 需要在所有其他导入之前设置
@@ -71,7 +76,25 @@ def create_app(config_class=Config):
     # 健康检查
     @app.route('/health')
     def health():
-        return {'status': 'ok', 'service': 'MiroFish Backend'}
+        uptime_seconds = int(time.time() - _start_time)
+        uptime_hours = uptime_seconds // 3600
+        uptime_minutes = (uptime_seconds % 3600) // 60
+        uptime_secs = uptime_seconds % 60
+        return {
+            'status': 'ok',
+            'service': 'MiroFish Backend',
+            'version': VERSION,
+            'uptime': f'{uptime_hours:02d}:{uptime_minutes:02d}:{uptime_secs:02d}',
+            'uptime_seconds': uptime_seconds,
+            'features': {
+                'llm_configured': bool(Config.LLM_API_KEY),
+                'zep_configured': bool(Config.ZEP_API_KEY),
+                'dual_platform_simulation': True,
+                'report_generation': True,
+                'agent_interviews': True,
+                'report_export': True,
+            }
+        }
     
     if should_log_startup:
         logger.info("MiroFish Backend 启动完成")
