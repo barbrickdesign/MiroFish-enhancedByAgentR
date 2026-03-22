@@ -1,0 +1,7 @@
+[
+  "dashboard_repair_agent",
+  "drift_detection_agent",
+  "file_patch_agent",
+  "frontend_rebuild_agent",
+  "self_healing_agent"
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "id": "test-patch-001",
+    "file": "agents/_test_patch_target.txt",
+    "find": "hello",
+    "replace": "greetings",
+    "encoding": "utf-8",
+    "queued_at": "2026-03-22T15:22:29.861999+00:00",
+    "applied": true,
+    "applied_at": "2026-03-22T15:22:29.862624+00:00",
+    "occurrences": 2,
+    "diff_summary": "Replaced 2 occurrence(s) of 'hello' → 'greetings' in agents/_test_patch_target.txt"
+  }
+]
